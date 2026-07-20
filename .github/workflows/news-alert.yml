@@ -1,0 +1,40 @@
+name: AICC/AI 뉴스 크롤링 & 카카오 발송
+
+on:
+  schedule:
+    # cron은 UTC 기준. 09:00 KST = 00:00 UTC
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}  # 수동 실행 버튼도 사용 가능
+
+permissions:
+  contents: write
+
+jobs:
+  crawl-and-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 뉴스 크롤링
+        run: python scripts/crawl_news.py
+
+      - name: 카카오톡 발송
+        env:
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
+        run: python scripts/send_kakao.py
+
+      - name: seen_urls.json 변경사항 커밋
+        run: |
+          git config user.name "news-bot"
+          git config user.email "news-bot@users.noreply.github.com"
+          git add data/seen_urls.json
+          git diff --staged --quiet || git commit -m "chore: update seen urls"
+          git push
