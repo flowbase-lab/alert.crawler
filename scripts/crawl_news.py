@@ -29,6 +29,22 @@ KEYWORD_GROUPS = {
         "생성형 AI 모델",
     ],
 }
+
+# 해외(영어권) 뉴스 - LLM/STT/TTS는 해외 발표가 많아 영어 구글 뉴스로 별도 검색
+GLOBAL_KEYWORD_GROUPS = {
+    "해외 AI 엔진 (LLM/STT/TTS)": [
+        "LLM model release",
+        "speech-to-text model release",
+        "text-to-speech AI model",
+        "generative AI model launch",
+    ],
+    "해외 AICC/컨택센터 AI": [
+        "AI contact center",
+        "conversational AI customer service",
+        "voice AI customer support",
+    ],
+}
+
 ALL_KEYWORDS = [kw for kws in KEYWORD_GROUPS.values() for kw in kws]
 
 # 매체 RSS는 전체 IT 뉴스에서 골라내야 하므로, 구글 검색 키워드보다 넓은 필터를 쓴다.
@@ -91,9 +107,9 @@ def save_seen(seen):
         json.dump(trimmed, f, ensure_ascii=False, indent=2)
 
 
-def fetch_news_for_keyword(keyword):
+def fetch_news_for_keyword(keyword, hl="ko", gl="KR", ceid="KR:ko"):
     query = urllib.parse.quote(keyword)
-    url = f"https://news.google.com/rss/search?q={query}&hl=ko&gl=KR&ceid=KR:ko"
+    url = f"https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=15) as res:
         data = res.read()
@@ -129,28 +145,45 @@ def fetch_media_feed(feed_url):
     return items[:MAX_PER_MEDIA]
 
 
-def build_message():
+def build_sections():
+    """섹션별로 (제목, [기사, ...]) 목록을 만든다. 기사는 {"title", "link"}.
+
+    주의: 여기서는 dedup 조회만 하고 seen_urls.json에 기록하지는 않는다.
+    실제로 카카오톡 발송에 성공한 기사만 send_kakao.py가 seen 처리한다.
+    (안 그러면 발송 개수 제한에 걸려 못 보낸 기사가 "이미 봤음" 처리되어
+    영영 다시 안 나오는 버그가 생긴다.)
+    """
     seen = load_seen()
-    new_seen = set(seen)
+    collected = set()  # 이번 실행 안에서 키워드끼리 겹치는 것만 방지
     sections = []
 
-    for group_name, keywords in KEYWORD_GROUPS.items():
-        group_lines = []
+    def collect(group_name, keywords, fetch_fn):
+        articles_out = []
         for kw in keywords:
             try:
-                articles = fetch_news_for_keyword(kw)
+                articles = fetch_fn(kw)
             except Exception as e:
                 print(f"[경고] '{kw}' 크롤링 실패: {e}")
                 continue
             for a in articles:
-                if a["link"] in seen:
+                if a["link"] in seen or a["link"] in collected:
                     continue
-                new_seen.add(a["link"])
-                group_lines.append(f"· {a['title']}\n  {a['link']}")
-        if group_lines:
-            sections.append(f"[{group_name}]\n" + "\n".join(group_lines))
+                collected.add(a["link"])
+                articles_out.append({"title": a["title"], "link": a["link"]})
+        if articles_out:
+            sections.append((group_name, articles_out))
 
-    media_lines = []
+    for group_name, keywords in KEYWORD_GROUPS.items():
+        collect(group_name, keywords, fetch_news_for_keyword)
+
+    for group_name, keywords in GLOBAL_KEYWORD_GROUPS.items():
+        collect(
+            group_name,
+            keywords,
+            lambda kw: fetch_news_for_keyword(kw, hl="en-US", gl="US", ceid="US:en"),
+        )
+
+    media_articles = []
     for media_name, feed_url in MEDIA_FEEDS.items():
         try:
             articles = fetch_media_feed(feed_url)
@@ -158,31 +191,36 @@ def build_message():
             print(f"[경고] '{media_name}' RSS 크롤링 실패: {e}")
             continue
         for a in articles:
-            if a["link"] in seen:
+            if a["link"] in seen or a["link"] in collected:
                 continue
-            new_seen.add(a["link"])
-            media_lines.append(f"· [{media_name}] {a['title']}\n  {a['link']}")
-    if media_lines:
-        sections.append("[국내 IT/AI 매체]\n" + "\n".join(media_lines))
+            collected.add(a["link"])
+            media_articles.append({"title": f"[{media_name}] {a['title']}", "link": a["link"]})
+    if media_articles:
+        sections.append(("국내 IT/AI 매체", media_articles))
 
-    save_seen(new_seen)
+    return sections
 
-    if not sections:
-        return None
 
+def render_text(sections):
     now_str = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
-    header = f"📰 AI/AICC 뉴스 브리핑 ({now_str} KST)\n\n"
-    return header + "\n\n".join(sections)
+    header = f"📰 AI/AICC 뉴스 브리핑 ({now_str} KST)"
+    blocks = [header]
+    for group_name, articles in sections:
+        lines = [f"[{group_name}]"]
+        lines += [f"· {a['title']}\n  {a['link']}" for a in articles]
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 if __name__ == "__main__":
-    msg = build_message()
-    if msg:
-        print(msg)
-        # GitHub Actions에서 다음 스텝으로 넘기기 위해 파일로 저장
-        with open("news_message.txt", "w", encoding="utf-8") as f:
-            f.write(msg)
-    else:
-        print("새로운 뉴스가 없습니다.")
-        with open("news_message.txt", "w", encoding="utf-8") as f:
-            f.write("")
+    sections = build_sections()
+
+    # 사람이 읽기 좋은 전체 미리보기 (발송용 청크 분할은 send_kakao.py가 처리)
+    text = render_text(sections) if sections else ""
+    print(text if text else "새로운 뉴스가 없습니다.")
+    with open("news_message.txt", "w", encoding="utf-8") as f:
+        f.write(text)
+
+    # GitHub Actions에서 다음 스텝(send_kakao.py)으로 넘기기 위해 구조화된 형태로 저장
+    with open("news_sections.json", "w", encoding="utf-8") as f:
+        json.dump(sections, f, ensure_ascii=False, indent=2)
