@@ -154,8 +154,17 @@ def build_sections():
     영영 다시 안 나오는 버그가 생긴다.)
     """
     seen = load_seen()
-    collected = set()  # 이번 실행 안에서 키워드끼리 겹치는 것만 방지
+    collected_links = set()  # 이번 실행 안에서 키워드끼리 겹치는 것만 방지
+    collected_titles = set()  # 같은 기사가 다른 링크(추적 파라미터)로 중복 수집되는 것 방지
     sections = []
+
+    def is_dup(title, link):
+        norm = title.strip().lower()
+        if link in seen or link in collected_links or norm in collected_titles:
+            return True
+        collected_links.add(link)
+        collected_titles.add(norm)
+        return False
 
     def collect(group_name, keywords, fetch_fn):
         articles_out = []
@@ -166,9 +175,8 @@ def build_sections():
                 print(f"[경고] '{kw}' 크롤링 실패: {e}")
                 continue
             for a in articles:
-                if a["link"] in seen or a["link"] in collected:
+                if is_dup(a["title"], a["link"]):
                     continue
-                collected.add(a["link"])
                 articles_out.append({"title": a["title"], "link": a["link"]})
         if articles_out:
             sections.append((group_name, articles_out))
@@ -191,9 +199,8 @@ def build_sections():
             print(f"[경고] '{media_name}' RSS 크롤링 실패: {e}")
             continue
         for a in articles:
-            if a["link"] in seen or a["link"] in collected:
+            if is_dup(a["title"], a["link"]):
                 continue
-            collected.add(a["link"])
             media_articles.append({"title": f"[{media_name}] {a['title']}", "link": a["link"]})
     if media_articles:
         sections.append(("국내 IT/AI 매체", media_articles))

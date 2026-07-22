@@ -28,7 +28,7 @@ REFRESH_TOKEN = os.environ["KAKAO_REFRESH_TOKEN"]
 SECTIONS_FILE = "news_sections.json"
 KST = datetime.timezone(datetime.timedelta(hours=9))
 MAX_CHUNK_LEN = 850  # 카카오 텍스트 템플릿 길이 제한(1000자)에 여유를 둔 청크 크기
-MAX_MESSAGES_PER_RUN = 10  # 하루치가 너무 밀려도 카톡이 도배되지 않도록 상한선
+MAX_MESSAGES_PER_RUN = 5  # 하루치가 너무 밀려도 카톡이 도배되지 않도록 상한선
 
 
 def refresh_access_token():

@@ -7,7 +7,7 @@
 - 국내 IT/AI 매체 RSS 직접 구독 (전자신문, AI타임스, 테크M, 블로터, 디지털투데이)
 
 기사가 많은 날은 카카오 텍스트 메시지 길이 제한(1000자) 때문에 여러 통으로 나눠서 보내며,
-한 번에 최대 10통까지만 보내고 나머지는 다음 실행 때 이어서 보냅니다(유실 없음).
+한 번에 최대 5통까지만 보내고 나머지는 다음 실행 때 이어서 보냅니다(유실 없음).
 
 ## 준비물
 - GitHub 계정 (개인 레포 1개)
@@ -56,4 +56,4 @@
   (필요하면 자동 갱신 저장 로직도 추가해드릴 수 있어요.)
 - 키워드는 `scripts/crawl_news.py`의 `KEYWORD_GROUPS`(국내)/`GLOBAL_KEYWORD_GROUPS`(해외)에서 자유롭게 수정 가능합니다.
 - 국내 매체 RSS 목록은 `scripts/crawl_news.py`의 `MEDIA_FEEDS`에서 추가/삭제할 수 있습니다.
-- 하루 발송량 상한은 `scripts/send_kakao.py`의 `MAX_MESSAGES_PER_RUN`(기본 10)에서 조절 가능합니다.
+- 하루 발송량 상한은 `scripts/send_kakao.py`의 `MAX_MESSAGES_PER_RUN`(기본 5)에서 조절 가능합니다.
